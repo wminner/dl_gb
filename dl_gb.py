@@ -13,8 +13,11 @@ from collections import OrderedDict
 # Downloads premium videos from Giantbomb.
 
 # Requires a premium account API key placed in api_key.txt in the same directory
-# as this script. Abides by undocumented limit of 100 videos downloaded per
-# day and documented max request rate of 200 requests per hour.
+# as this script. Reportedly there is an undocumented limit of 100 videos
+# downloaded per day (not abiding, still testing), and a documented max request
+# rate of 200 requests per hour (abiding by this).
+
+# Edit g_skip_titles to filter out shows from download list
 
 ################################################################################
 # Globals 
@@ -27,11 +30,14 @@ g_error_file = "err.csv"
 g_pbar = None
 g_start_time = time.time()
 
-g_dl_count = 0                  # Download count
-g_rq_count = 0                  # Request count
-g_max_dl_rate = 1000000000/(24*60*60)  # Max 100 videos per day (in videos/second)
-g_max_rq_rate = 200/(60*60)     # Max 200 requests per hour (in requests/second)
-g_query_limit = 100             # Max amount of videos to query
+g_dl_count = 0                          # Download count
+g_rq_count = 0                          # Request count
+g_query_limit = 100                     # Max amount of videos to query
+g_max_dl_rate = 1000000000/(24*60*60)   # Max 100 videos per day (in videos/second)
+g_max_rq_rate = 200/(60*60)             # Max 200 requests per hour (in requests/second)
+
+# Skip queuing these titles for download
+g_skip_titles = ["Giant Bombcast", "The Giant Beastcast"]
 
 # Regex patterns
 g_premium_page_pattern = re.compile("\s+<a href=\"(?P<url>/(?:shows|videos)/[/\-\w\d]+/(?P<guid>\d{2,6}\-\d{2,6})).*")
@@ -44,14 +50,11 @@ g_video_dl_name_pattern = re.compile(".*/(.*)\.mp4\s*")
 ################################################################################
 def main(argv):
     # Init variables
-    query_mode = True                   # Queries for video download links
-    download_mode = True                # Downloads videos
-    dl_dict = OrderedDict()             # Dictionary of all the videos to download
-    query_dict = OrderedDict()          # Temp dictionary to query videos to download
-    done_dict = {}                      # Dictionary of all videos already downloaded
-    
-    # Skip queuing these titles for download
-    skip_titles = ["Giant Bombcast", "The Giant Beastcast"]    
+    query_mode = True           # Queries for video download links
+    download_mode = True        # Downloads videos
+    dl_dict = OrderedDict()     # Dictionary of all the videos to download
+    query_dict = OrderedDict()  # Temp dictionary to query videos to download
+    done_dict = {}              # Dictionary of all videos already downloaded
 
     # Init api key
     try:
@@ -104,7 +107,7 @@ def main(argv):
         offset = 0
         
         while True:
-            query_dict = get_dl_urls_from_api(offset, done_dict, skip_titles)
+            query_dict = get_dl_urls_from_api(offset, done_dict)
             if len(query_dict) == 0:
                 break
             dl_dict.update(query_dict)
@@ -139,7 +142,13 @@ def main(argv):
     sys.exit(0)
 
 ################################################################################
-# Gets video urls and guids from premium page
+# Desc
+#   Gets video urls and guids from premium page. Currently unused.
+# Params
+#   page_no     int page number to grab urls/guids from
+# Returns
+#   url_list    str list of video urls
+#   guid_list   str list of video guids
 ################################################################################
 def get_url_list_from_page(page_no):
     print("Searching for premium URLs on page {}...".format(page_no))
@@ -173,12 +182,16 @@ def get_url_list_from_page(page_no):
     return url_list, guid_list
 
 ################################################################################
-# Gets download urls and forms download name from videos API call
-# All-in-one step vs calling get_url_list_from_page and get_dl_url_from_guid
-# offset changes which set of videos are queried by API
-# Returns query_dict composed of (dl_name, dl_url)
+# Desc
+#   Gets download urls and forms download name from videos API call.
+#   All-in-one step vs calling get_url_list_from_page and get_dl_url_from_guid.
+# Params
+#   offset          int changes which set of videos are queried by API
+#   done_dict       dict of completed downloads (dl_name, dl_url)
+# Returns
+#   query_dict      dict of videos gathered from query (dl_name, dl_url)
 ################################################################################
-def get_dl_urls_from_api(offset, done_dict, skip_titles):
+def get_dl_urls_from_api(offset, done_dict):
     global g_api_key
     filter = "premium:true"
     limit = 100 # Hard limit by API
@@ -225,7 +238,7 @@ def get_dl_urls_from_api(offset, done_dict, skip_titles):
 
         # Check for skip title
         if title is not None:
-            if title.text in skip_titles:
+            if title.text in g_skip_titles:
                 continue
 
         # Find highest quality download link
@@ -275,7 +288,13 @@ def get_dl_urls_from_api(offset, done_dict, skip_titles):
     return query_dict
 
 ################################################################################
-# Gets download url from guid, and what to name it
+# Desc
+#   Gets download url from guid, and what to name it
+# Params
+#   guid        str guid for video to get
+# Returns
+#   dl_name     str download name
+#   dl_url      str download url
 ################################################################################
 def get_dl_url_from_guid(guid):
     global g_api_key
@@ -353,7 +372,13 @@ def get_dl_url_from_guid(guid):
     return dl_name, dl_url
 
 ################################################################################
-# Downloads a video from dl url, returns true on success, else false
+# Desc
+#   Downloads a video from given dl_url, and names it dl_name
+# Params
+#   dl_name     str to name the downloaded video
+#   dl_url      str url to download from
+# Returns
+#   bool        True on success, otherwise False
 ################################################################################
 def download_video(dl_name, dl_url):
     global g_api_key
@@ -382,7 +407,13 @@ def download_video(dl_name, dl_url):
     return True
 
 ################################################################################
-# Saves dl_dict and done_dict to progress files
+# Desc
+#   Saves dl_dict and done_dict to progress files
+# Params
+#   dl_dict         dict of videos to download
+#   done_dict       dict of videos already downloaded
+# Returns
+#   None
 ################################################################################
 def save_progress(dl_dict, done_dict):
     # Log videos that need to be downloaded
@@ -404,7 +435,13 @@ def save_progress(dl_dict, done_dict):
         print("WARN: Exception when writing [{}, {}] to {}! Skipping...".format(done_name, done_url, g_done_file))
 
 ################################################################################
-# Loads dl_dict and done_dict from progress files
+# Desc
+#   Loads dl_dict and done_dict from progress files
+# Params
+#   None
+# Returns
+#   dl_dict         dict of videos to download
+#   done_dict       dict of videos already downloaded
 ################################################################################
 def load_progress():
     dl_dict = OrderedDict()
@@ -445,7 +482,12 @@ def load_progress():
     return dl_dict, done_dict
 
 ################################################################################
-# Increments and checks download rate, returns when rate limit is not exceeded
+# Desc
+#   Increments and checks download rate, returns when rate limit is not exceeded
+# Params
+#   None
+# Returns
+#   None
 ################################################################################
 def inc_and_check_dl_rate():
     global g_start_time
@@ -466,7 +508,12 @@ def inc_and_check_dl_rate():
         curr_rate = g_dl_count / (curr_time - g_start_time)
 
 ################################################################################
-# Increments and checks request rate, returns when rate limit is not exceeded
+# Desc
+#   Increments and checks request rate, returns when rate limit is not exceeded
+# Params
+#   None
+# Returns
+#   None
 ################################################################################
 def inc_and_check_rq_rate():
     global g_start_time
@@ -487,7 +534,14 @@ def inc_and_check_rq_rate():
         curr_rate = g_rq_count / (curr_time - g_start_time)      
 
 ################################################################################
-# Shows progress during download
+# Desc
+#   Shows progress during download, compatible with urllib.request.urlretrieve
+# Params
+#   block_num       int current block number of download
+#   block_size      int current block size of download
+#   total_size      int total size of download
+# Returns
+#   None
 ################################################################################
 def show_progress(block_num, block_size, total_size):
     global g_pbar
@@ -503,7 +557,8 @@ def show_progress(block_num, block_size, total_size):
         g_pbar = None
 
 ################################################################################
-# Prints a progress bar
+# Desc
+#   Simple progress bar class, to be used with show_progress function
 ################################################################################
 class ProgressBar:
     def __init__(self, dl_size):
@@ -531,7 +586,12 @@ class ProgressBar:
         print('|')
 
 ################################################################################
-# Prints a sleep bar (in seconds)
+# Desc
+#   Prints a sleep bar (in seconds)
+# Params
+#   sleep_time      int time to sleep in seconds
+# Returns
+#   None
 ################################################################################
 def sleep_bar(sleep_time):
     maxval = 50
@@ -555,15 +615,20 @@ def sleep_bar(sleep_time):
     print('|')
 
 ################################################################################
-# Prints usage
+# Desc
+#   Prints usage
+# Params
+#   None
+# Returns
+#   None
 ################################################################################
 def print_usage():
-    print("Usage: dl_gb.py [OPTION]...                              ")
-    print("  By default both query and download modes will be enabled.  ")
-    print("  -q, --query                                                ")
-    print("      query mode only                                        ")
-    print("  -d, --download                                             ")
-    print("      download mode only                                     ")
+    print("Usage: dl_gb.py [OPTION]...                                      ")
+    print("  Note: both query and download modes will be enabled by default ")
+    print("  -q, --query                                                    ")
+    print("      Query mode only: query for videos and log them in dl.csv   ")
+    print("  -d, --download                                                 ")
+    print("      Download mode only: download all videos in dl.csv          ")
 
 # Strip off script name in arg list
 if __name__ == "__main__":
