@@ -1,3 +1,4 @@
 temp
 api_key.txt
-progress.csv
+*.csv
+*.bak
