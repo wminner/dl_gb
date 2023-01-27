@@ -567,10 +567,10 @@ class ProgressBar:
         self.dl_size = dl_size
 
         print("|0%", end="")
-        for k in range(int(self.maxval/2)-5):
+        for k in range(round(self.maxval/2.0)-7):
             print(" ", end="")
-        print("Progress ", end="")
-        for k in range(int(self.maxval/2)-5):
+        print("Progress", end="")
+        for k in range(round(self.maxval/2.0)-7):
             print(" ", end="")
         print("100%|")
 
@@ -578,7 +578,7 @@ class ProgressBar:
         print("|", end="")
 
     def update(self, updateval):
-        while self.currval < int(self.maxval*(updateval/self.dl_size)):
+        while self.currval < round(self.maxval*(updateval/float(self.dl_size))):
             print(".", end="", flush=True)
             self.currval += 1
 
