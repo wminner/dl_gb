@@ -137,7 +137,7 @@ def main(argv):
 
         # Delete empty dl progress file
         print("Done downloading all videos! Deleting {}...".format(g_dl_file))
-        os.remove(dl_file_path)
+        os.remove(g_dl_file)
 
     sys.exit(0)
 
